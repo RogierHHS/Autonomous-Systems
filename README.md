@@ -30,20 +30,6 @@ python main.py
 - Voer een nummer **(0-6)** in om een schijf in een kolom te laten vallen.
 - De agent reageert en maakt zijn zet.
 - Het spel eindigt wanneer een speler **vier-op-een-rij** krijgt of het bord vol is.
-
-Voorbeeld console-uitvoer:
-
-Beschikbare zetten (nummer = beschikbare kolom):
-· · · O X · ·
-· · · O X · ·
-· · · O X · ·
-· · · X · · ·
-· · · O · · ·
-· · · O · · ·
- 0 1 2 3 4 5 6
-
-Kies een kolom (0-6): 4
-
  
 ---
 
