@@ -10,14 +10,17 @@ Dit project bevat een **rule-based agent** voor **Connect Four**, geïmplementee
 ```bash
 git clone https://github.com/RogierHHS/Autonomous-Systems.git
 cd Autonomous-Systems
+```bash
 
 2. Installeer de vereiste libraries
-
+```bash
 pip install -r requirements.txt
+```bash
 
 3. Start het spel
-
+```bash
 python main.py
+```bash
 
  Hoe te spelen
 
@@ -27,7 +30,7 @@ python main.py
     Het spel eindigt wanneer een speler vier-op-een-rij krijgt of het bord vol is.
 
 Voorbeeld console-uitvoer:
-
+```bash
 Beschikbare zetten (nummer = beschikbare kolom):
 · · · O X · ·
 · · · O X · ·
@@ -38,7 +41,7 @@ Beschikbare zetten (nummer = beschikbare kolom):
  0 1 2 3 4 5 6
 
 Kies een kolom (0-6): 4
-
+```bash
  AI Strategie
 
 De agent volgt een reeks regels in prioriteitsvolgorde:
