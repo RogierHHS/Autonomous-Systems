@@ -3,29 +3,21 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pettingzoo.classic import connect_four_v3
 
-# Initialiseer de PettingZoo‑omgeving
+# Initialiseer de PettingZoo-omgeving
 env = connect_four_v3.env(render_mode="rgb_array")
-env.reset(seed=42)
 
 def convert_observation(obs):
-    """
-    Zet PettingZoo-observatie om naar een 6×7 bord waarbij:
-      - 1 = player_0
-      - 2 = player_1
-    """
-    board = np.zeros((6, 7), dtype=int)
+    board = np.zeros((6,7), dtype=int)
     for i in range(6):
         for j in range(7):
-            if obs[i, j, 1] == 1:
-                board[i, j] = 1
-            elif obs[i, j, 0] == 1:
-                board[i, j] = 2
+            if obs[i,j,0] == 1:
+                board[i,j] = 1
+            elif obs[i,j,1] == 1:
+                board[i,j] = 2
     return np.flipud(board)
 
-
 def render_board():
-    rgb = env.render()
-    plt.imshow(rgb)
+    plt.imshow(env.render())
     plt.axis('off')
     plt.show()
 
@@ -40,7 +32,7 @@ def get_human_action(observation):
             move = int(input("Kies kolom (0–6): "))
             if 0 <= move < 7 and mask[move]:
                 return move
-        except ValueError:
+        except:
             pass
         print("Ongeldige zet — probeer opnieuw.")
 
@@ -107,7 +99,6 @@ def rule_based_action(observation, agent):
     # Regel 8: Willekeurige zet
     return random.choice(valid_moves), 8
 
-
 def count_three_in_a_row(board, player):
     return sum(
         sum(board[r, c+i] == player for i in range(4)) == 3 and 0 in board[r, c:c+4]
@@ -124,7 +115,6 @@ def check_losing_move(board, col, player):
     return check_win(temp, 3-player)
 
 def check_win(board, player):
-    # horizontaal, verticaal
     for r in range(6):
         for c in range(4):
             if all(board[r, c+i] == player for i in range(4)):
@@ -133,39 +123,39 @@ def check_win(board, player):
         for r in range(3):
             if all(board[r+i, c] == player for i in range(4)):
                 return True
-    # diagonaal beide richtingen
     for r in range(3):
         for c in range(4):
-            if all(board[r+i, c+i] == player for i in range(4)) or \
-               all(board[r+3-i, c+i] == player for i in range(4)):
+            if all(board[r+i, c+i] == player for i in range(4)) or all(board[r+3-i, c+i] == player for i in range(4)):
                 return True
     return False
 
 def play_game():
     env.reset(seed=42)
     render_board()
+
     winner = None
+    agent_to_player = {"player_0":1, "player_1":2}
 
     for agent in env.agent_iter():
-        obs, _, term, trunc, _ = env.last()
-        if term or trunc:
+        obs, reward, termination, truncation, _ = env.last()
+        if termination or truncation:
+            if reward == 1:
+                winner = agent_to_player[agent]
+            elif reward == -1:
+                winner = 3 - agent_to_player[agent]
             break
 
-        observation = {"board": convert_observation(obs["observation"]), "action_mask": obs["action_mask"]}
+        obs_dict = {
+            "board": convert_observation(obs["observation"]),
+            "action_mask": obs["action_mask"]
+        }
         if agent == "player_0":
-            action = get_human_action(observation)
+            action = get_human_action(obs_dict)
         else:
-            action, rule_id = rule_based_action(observation, agent)
+            action, _ = rule_based_action(obs_dict, agent)
 
         env.step(action)
         render_board()
-
-        board = convert_observation(env.last()[0]["observation"])
-        if check_win(board, 2):
-            winner = 2
-            break
-        if not any(env.last()[0]["action_mask"]):
-            break
 
     print("\n" + "="*30)
     render_board()
