@@ -3,7 +3,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pettingzoo.classic import connect_four_v3
 
-# Initialiseer de PettingZoo-omgeving
+# ========== PettingZoo setup en hulp-functies ==========
+
 env = connect_four_v3.env(render_mode="rgb_array")
 
 def convert_observation(obs):
@@ -37,81 +38,184 @@ def get_human_action(observation):
         print("Ongeldige zet — probeer opnieuw.")
 
 def valid_moves(board):
-    return [c for c in range(7) if board[0,c] == 0]
+    return [c for c in range(7) if 0 in board[:, c]]
 
 def drop(board, col, player):
     temp = board.copy()
-    row = max(np.where(temp[:,col] == 0)[0])
-    temp[row,col] = player
+    row = max(np.where(temp[:, col] == 0)[0])
+    temp[row, col] = player
     return temp
 
 def check_win(board, player):
+    """Check of 'player' vier op een rij heeft."""
+    # Horizontaal
     for r in range(6):
         for c in range(4):
-            if all(board[r,c+i] == player for i in range(4)): return True
+            if all(board[r, c+i] == player for i in range(4)):
+                return True
+    # Verticaal
     for c in range(7):
         for r in range(3):
-            if all(board[r+i,c] == player for i in range(4)): return True
+            if all(board[r+i, c] == player for i in range(4)):
+                return True
+    # Diagonaal
     for r in range(3):
         for c in range(4):
-            if all(board[r+i,c+i] == player for i in range(4)) or all(board[r+3-i,c+i] == player for i in range(4)):
+            if (all(board[r+i, c+i] == player for i in range(4)) or
+                all(board[r+3-i, c+i] == player for i in range(4))):
                 return True
     return False
 
-def valid_moves(board):
-    return [c for c in range(7) if 0 in board[:, c]]
+def is_terminal_node(board):
+    """Retourneer True als het bord in een terminale toestand is: winst of volle kolommen."""
+    if check_win(board, 1) or check_win(board, 2):
+        return True
+    if all(board[0, c] != 0 for c in range(7)):  # vol bord
+        return True
+    return False
 
-def rule_based_action_improved(observation, agent):
+# ========== Evalueer (score) van een bord ==========
+
+def evaluate_window(window, ai_player):
+    """
+    'window' is een lijst met 4 cellen (bijv. [board[r,c], board[r,c+1], ...])
+    Retourneer een score afhankelijk van hoeveel stenen van de AI (ai_player)
+    en van de tegenstander erin zitten.
+    """
+    opp_player = 3 - ai_player
+    score = 0
+
+    ai_count = window.count(ai_player)
+    opp_count = window.count(opp_player)
+    empty_count = window.count(0)
+
+    # Grote bonus als we 4-op-een-rij hebben
+    if ai_count == 4:
+        score += 100000
+    # Grote straf als de tegenstander 4-op-een-rij heeft
+    elif opp_count == 4:
+        score -= 100000
+    # 3 van AI en 1 leeg => kans om 4 te maken
+    elif ai_count == 3 and empty_count == 1:
+        score += 50
+    # 2 van AI en 2 leeg => kleinere kans
+    elif ai_count == 2 and empty_count == 2:
+        score += 2
+    # 3 van tegenstander en 1 leeg => gevaar
+    elif opp_count == 3 and empty_count == 1:
+        score -= 40
+    # 2 van tegenstander en 2 leeg => mild gevaar
+    elif opp_count == 2 and empty_count == 2:
+        score -= 2
+
+    return score
+
+def score_position(board, ai_player):
+    """Bereken een totale score voor het hele bord."""
+    score = 0
+    rows, cols = board.shape
+
+    # Maak 'windows' van 4 cellen in elke richting
+    # 1) Horizontaal
+    for r in range(rows):
+        for c in range(cols-3):
+            window = list(board[r, c:c+4])
+            score += evaluate_window(window, ai_player)
+    # 2) Verticaal
+    for c in range(cols):
+        for r in range(rows-3):
+            window = list(board[r:r+4, c])
+            score += evaluate_window(window, ai_player)
+    # 3) Diagonaal
+    for r in range(rows-3):
+        for c in range(cols-3):
+            window = [board[r+i, c+i] for i in range(4)]
+            score += evaluate_window(window, ai_player)
+    for r in range(rows-3):
+        for c in range(cols-3):
+            window = [board[r+3-i, c+i] for i in range(4)]
+            score += evaluate_window(window, ai_player)
+
+    return score
+
+# ========== Minimax (met alpha-beta pruning) ==========
+
+def minimax(board, depth, alpha, beta, maximizingPlayer, ai_player):
+    """
+    - board: huidig bord
+    - depth: huidige zoekdiepte
+    - alpha, beta: pruning-parameters
+    - maximizingPlayer: True (AI aan zet) of False (tegenstander aan zet)
+    - ai_player: 1 of 2 (de AI)
+    Retourneert (score, kolom)
+    """
+    valid_cols = valid_moves(board)
+    terminal = is_terminal_node(board)
+
+    # Base cases
+    if depth == 0 or terminal:
+        # Geef finale score of heuristic
+        if terminal:
+            if check_win(board, ai_player):
+                return (999999999, None)
+            elif check_win(board, 3 - ai_player):
+                return (-999999999, None)
+            else:
+                return (0, None)  # Gelijkspel of vol bord
+        else:
+            return (score_position(board, ai_player), None)
+
+    if maximizingPlayer:
+        # AI probeert de score te maximaliseren
+        value = -float('inf')
+        best_col = random.choice(valid_cols)  # fallback
+        for col in valid_cols:
+            new_board = drop(board, col, ai_player)
+            new_score, _ = minimax(new_board, depth-1, alpha, beta, False, ai_player)
+            if new_score > value:
+                value = new_score
+                best_col = col
+            alpha = max(alpha, value)
+            if alpha >= beta:
+                break
+        return value, best_col
+    else:
+        # Tegenstander (mens) probeert score te minimaliseren
+        value = float('inf')
+        best_col = random.choice(valid_cols)
+        opp_player = 3 - ai_player
+        for col in valid_cols:
+            new_board = drop(board, col, opp_player)
+            new_score, _ = minimax(new_board, depth-1, alpha, beta, True, ai_player)
+            if new_score < value:
+                value = new_score
+                best_col = col
+            beta = min(beta, value)
+            if alpha >= beta:
+                break
+        return value, best_col
+
+def get_best_move_minimax(board, ai_player, depth=3):
+    """
+    Zoek de beste kolom via minimax (diepte = 3 standaard).
+    Retourneer kolom (int).
+    """
+    # We zijn zelf 'maximizingPlayer'
+    _, col = minimax(board, depth, -float('inf'), float('inf'), True, ai_player)
+    return col
+
+# ========== AI-actiefunctie die minimax aanroept ==========
+
+def ai_action_minimax(observation, agent):
     board = observation["board"]
-    player = 1 if agent == "player_0" else 2
-    opponent = 3 - player
-    valid = valid_moves(board)
+    ai_player = 1 if agent == "player_0" else 2
 
-    # Regel 1: Direct winnen
-    for col in valid:
-        if check_win(drop(board, col, player), player):
-            return col, 1
+    # Bepaal beste zet via minimax
+    col = get_best_move_minimax(board, ai_player, depth=3)
 
-    # Regel 2: Blokkeer directe tegenstanderswinst
-    for col in valid:
-        if check_win(drop(board, col, opponent), opponent):
-            return col, 2
+    return col, "Minimax"
 
-    # Regel 3: Blokkeer open drie‑in‑een‑rij van tegenstander
-    for col in valid:
-        temp = drop(board, col, opponent)
-        if any(sum(temp[r, c+i] == opponent for i in range(4)) == 3 and 0 in temp[r, c:c+4]
-               for r in range(6) for c in range(4)):
-            return col, 3
-
-    # Regel 4: Dubbele dreiging creëren
-    for col in valid:
-        temp = drop(board, col, player)
-        if sum(check_win(drop(temp, c, player), player) for c in valid_moves(temp)) >= 2:
-            return col, 4
-
-    # Regel 5: Open drie‑in‑een‑rij benutten
-    for col in valid:
-        temp = drop(board, col, player)
-        if any(sum(temp[r, c+i] == player for i in range(4)) == 3 and 0 in temp[r, c:c+4]
-               for r in range(6) for c in range(4)):
-            return col, 5
-
-    # Regel 6: Voorkeur midden
-    for col in [3,2,4,1,5,0,6]:
-        if col in valid:
-            return col, 6
-
-    # Regel 7: Vermijd directe verlieszet
-    safe = [c for c in valid if not check_win(drop(board, c, opponent), opponent)]
-    if safe:
-        return random.choice(safe), 7
-
-    # Regel 8: Willekeurige zet
-    return random.choice(valid), 8
-
-
-
+# ========== Hoofd-functie om te spelen ==========
 
 def play_game_improved():
     env.reset(seed=42)
@@ -132,10 +236,15 @@ def play_game_improved():
             "board": convert_observation(obs["observation"]),
             "action_mask": obs["action_mask"]
         }
+
         if agent == "player_0":
+            # Menselijke speler
             action = get_human_action(obs_dict)
+            rule = "Human"
         else:
-            action, _ = rule_based_action_improved(obs_dict, agent)
+            # AI speler
+            action, rule = ai_action_minimax(obs_dict, agent)
+            print(f"[{agent}] kiest kolom {action} ({rule})")
 
         env.step(action)
         render_board()
